@@ -6,10 +6,9 @@ Q-value network based on the original DQN paper (Mnih et. al. 2013).
 """
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Flatten, Convolution2D, Permute
-from keras.optimizers import Adam
 import keras.backend as K
 
-def Q_network(input_shape):
+def Q_network(input_shape,nb_actions):
 
 	model = Sequential()
 

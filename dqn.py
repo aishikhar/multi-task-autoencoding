@@ -1,29 +1,19 @@
 from __future__ import division
-import argparse
 
 from PIL import Image
 import numpy as np
-import gym
 
-from 
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Flatten, Convolution2D, Permute
-from keras.optimizers import Adam
-import keras.backend as K
+from models import policy_network
 
 from rl.agents.dqn import DQNAgent
 from rl.policy import LinearAnnealedPolicy, BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
 from rl.core import Processor
-from rl.callbacks import FileLogger, ModelIntervalCheckpoint
 
 
 INPUT_SHAPE = (84, 84)
 WINDOW_LENGTH = 4
-NB_STEPS_PER_TSK= 5000
-NB_TASKS= 50
-CALLBACK_INTERVAL= 5000
-LOG_INTERVAL= 4990
+
 
 class AtariProcessor(Processor):
     def process_observation(self, observation):
@@ -35,63 +25,27 @@ class AtariProcessor(Processor):
         return processed_observation.astype('uint8')  # saves storage in experience memory
 
     def process_state_batch(self, batch):
-   
+
         processed_batch = batch.astype('float32') / 255.
         return processed_batch
 
     def process_reward(self, reward):
         return np.clip(reward, -1., 1.)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--mode', choices=['train', 'test'], default='train')
-parser.add_argument('--env-name', type=str, default='BreakoutDeterministic-v4')
-parser.add_argument('--weights', type=str, default=None)
-args = parser.parse_args()
+def DQN_atari(nb_actions):
 
-env = gym.make(args.env_name)
-np.random.seed(123)
-env.seed(123)
-# Get the actions of the OpenAI Gym environment
-nb_actions = env.action_space.n
+    # Initializing policy with policy network, memory and input-processors
+    input_shape = (WINDOW_LENGTH,) + INPUT_SHAPE
+    model = policy_network.Q_network(input_shape,nb_actions)
+    memory = SequentialMemory(limit=1000000, window_length=WINDOW_LENGTH)
+    processor = AtariProcessor()
+    policy = LinearAnnealedPolicy(EpsGreedyQPolicy(), attr='eps', value_max=1., value_min=.1, value_test=.05,
+                                  nb_steps=1000000)
+    # DQN Agent hyperparameters
+    nb_steps_warmup = 10
+    target_model_update = 100
 
-input_shape = (WINDOW_LENGTH,) + INPUT_SHAPE
-model = 
+    return DQNAgent(model=model, nb_actions=nb_actions, policy=policy, memory=memory,
+                   processor=processor, nb_steps_warmup=nb_steps_warmup, gamma=.99, target_model_update=target_model_update,
+                   train_interval=4, delta_clip=1.)
 
-memory = SequentialMemory(limit=1000000, window_length=WINDOW_LENGTH)
-processor = AtariProcessor()
-
-policy = LinearAnnealedPolicy(EpsGreedyQPolicy(), attr='eps', value_max=1., value_min=.1, value_test=.05,
-                              nb_steps=1000000)
-
-
-""" Hyperparameters for now:
-"""    
-nb_steps_warmup = 10
-target_model_update = 100
-
-
-dqn = DQNAgent(model=model, nb_actions=nb_actions, policy=policy, memory=memory,
-               processor=processor, nb_steps_warmup=nb_steps_warmup, gamma=.99, target_model_update=target_model_update,
-               train_interval=4, delta_clip=1.)
-dqn.compile(Adam(lr=.00025), metrics=['mae'])
-
-if args.mode == 'train':
-
-    weights_filename = 'dqn_mem_{}_weights.h5f'.format(args.env_name)
-    checkpoint_weights_filename = 'dqn_mem_' + args.env_name + '_weights_{step}.h5f'
-    log_filename = 'dqn_mem_{}_log.json'.format(args.env_name)
-    callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=CALLBACK_INTERVAL)]
-    callbacks += [FileLogger(log_filename, interval=100)]
-    dqn.fit(env, callbacks=callbacks, nb_steps=NB_STEPS_PER_TSK, log_interval=LOG_INTERVAL,visualize=True)
-
-    # Save the weights of the Agent
-    dqn.save_weights(weights_filename, overwrite=True)
-
-    # Finally, evaluate our algorithm for 10 episodes.
-    dqn.test(env, nb_episodes=20, visualize=True)
-elif args.mode == 'test':
-    weights_filename = 'dqn_mem_{}_weights.h5f'.format(args.env_name)
-    if args.weights:
-        weights_filename = args.weights
-    dqn.load_weights(weights_filename)
-    dqn.test(env, nb_episodes=10, visualize=False)
