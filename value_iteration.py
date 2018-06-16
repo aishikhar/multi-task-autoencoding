@@ -1,4 +1,4 @@
-""" ---------------- Value iteration implementation ------------- 
+""" ---------------- Value iteration implementation------------- 
  Assumptions:
  Discrete, Tractable State & Action space
  Environment dynamics (Transition function & Reward function) are known
